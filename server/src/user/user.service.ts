@@ -62,30 +62,51 @@ export class UserService {
     // Исправленный метод для экспорта в CSV
     async exportUsersToCSV(): Promise<string> {
         const users = await this.findAll();
-        const exportDir = path.join(__dirname, 'exports');
 
-        // Check if the 'exports' directory exists, and create it if it doesn't
+        // Проверяем, есть ли данные
+        if (!users || users.length === 0) {
+            throw new Error('Нет данных для экспорта.');
+        }
+
+        const exportDir = path.join(process.cwd(), 'exports');
+
+        // Проверяем, существует ли папка, и создаём, если нет
         if (!fs.existsSync(exportDir)) {
             fs.mkdirSync(exportDir, { recursive: true });
         }
 
         const filePath = path.join(exportDir, 'users.csv');
-        writeToPath(filePath, users, {
-            headers: true,
-            transform: (row: User) => ({
-                id: row.id,
-                email: row.email,
-                createdAt: row.createdAt,
-                updatedAt: row.updatedAt,
-            }),
-        }).on('finish', () => {
-            this.logger.log('Users exported to CSV successfully');
-        }).on('error', (error) => {
-            this.logger.error('Error exporting users to CSV', error);
-        });
 
-        return filePath;
+        // Возвращаем Promise, чтобы гарантировать завершение записи
+        return new Promise((resolve, reject) => {
+            writeToPath(filePath, users, {
+                headers: true,
+                transform: (row: User) => ({
+                    id: row.id,
+                    email: row.email,
+                    createdAt: row.createdAt,
+                    updatedAt: row.updatedAt,
+                }),
+            })
+                .on('finish', () => {
+                    console.log(`Файл успешно создан: ${filePath}`);
+
+                    // Проверяем, что файл не пустой
+                    const stats = fs.statSync(filePath);
+                    if (stats.size === 0) {
+                        reject(new Error('Файл пустой после записи!'));
+                    } else {
+                        resolve(filePath);
+                    }
+                })
+                .on('error', (error) => {
+                    console.error('Ошибка записи CSV:', error);
+                    reject(new Error('Не удалось создать файл CSV'));
+                });
+        });
     }
+
+
 
     // Метод для экспорта в XLSX (с буфером)
     async exportUsersToXLSX(): Promise<Buffer> {
